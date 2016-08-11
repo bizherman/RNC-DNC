@@ -1,7 +1,7 @@
 ---
-title: "Final Project PS239T: Polarity"
+title: "RNC-DNC Text Analysis"
 author: "Biz Herman"
-date: "December 9, 2015"
+date: "11 August 2016"
 output: html_document
 ---
 
