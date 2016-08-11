@@ -33,8 +33,8 @@ List all other files contained in the repo, along with a brief description of ea
 
 #### Data
 
-1. RNC_files.csv: Contains transcripts from all RNC speehces.
-2. DNC_files.csv: Contains transcripts from all DNC speeches.
+1. rncFINAL.csv: Contains transcripts from all RNC speehces.
+2. dncFINAL.csv: Contains transcripts from all DNC speeches.
 3. stoplist.csv: Common words used that are eliminated from the documents when modeling topics.
 
 #### Code
