@@ -29,8 +29,6 @@ There are a number of packages that need to be installed in the R code, includin
 
 ## Files
 
-List all other files contained in the repo, along with a brief description of each one, like so:
-
 #### Data
 
 1. rncFINAL.csv: Contains transcripts from all RNC speehces.
