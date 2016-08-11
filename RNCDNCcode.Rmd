@@ -31,25 +31,6 @@ library(RColorBrewer)
 
 ```{r}
 
-# CLEANING THE RNC DATA
-
-# rnc.df <-read.csv("RNC_files.csv", header=TRUE, fileEncoding="latin1", stringsAsFactors = F) #read in CSV file
-# donaldtrump <- rnc.df$Speech[48:49]
-# donaldtrump <- paste(donaldtrump, collapse = "")
-# rnc.df$Speech[48] <- donaldtrump
-# rnc.df$Speech[48]
-# rnc.df <- rnc.df[1:48, ]
-
-# rnc.df$Speech <- gsub(pattern="\n", replacement=" ", rnc.df$Speech)
-# rnc.df$Speech <- gsub(pattern="Ñ", replacement="--", rnc.df$Speech)
-# rnc.df$Speech <- gsub(pattern="U.S.", replacement="United States", rnc.df$Speech)
-# rnc.df$Speech <- gsub(pattern="''Father", replacement="Father", rnc.df$Speech)
-# rnc.df$Speech <- gsub(pattern="''", replacement="", rnc.df$Speech)
-# rnc.df$Speech <- gsub(pattern="Lt. Col.", replacement="Lieutenant Colonel", rnc.df$Speech)
-# rnc.df$Speech <- gsub(pattern="ð", replacement="", rnc.df$Speech)
-
-# write.csv(rnc.df, file = "rncFINAL.csv")
-
 # setting up the RNC corpus
 
 rnc.df <-read.csv("rncFINAL.csv", header=TRUE, fileEncoding="UTF8") #read in CSV file
@@ -841,22 +822,6 @@ for(i in 1:num.topics){
   topic.top.words <- mallet.top.words(topic.model, topic.words[i,], num.top.words)
   wordcloud(topic.top.words$words, topic.top.words$weights, c(3,.6), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
 }
-
-# DNC ANALYSIS, CLEANING DNC DATA
-
-# dnc.df <-read.csv("DNC_files.csv", header=TRUE, fileEncoding="latin1", stringsAsFactors = F) #read in CSV file
-
-# dnc.df$Speech <- gsub(pattern="\n", replacement=" ", dnc.df$Speech)
-# dnc.df$Speech <- gsub(pattern="Ñ", replacement="--", dnc.df$Speech)
-# dnc.df$Speech <- gsub(pattern="U.S.", replacement="United States", dnc.df$Speech)
-# dnc.df$Speech <- gsub(pattern="''Father", replacement="Father", dnc.df$Speech)
-# dnc.df$Speech <- gsub(pattern="''", replacement="", dnc.df$Speech)
-# dnc.df$Speech <- gsub(pattern="Lt. Col.", replacement="Lieutenant Colonel", dnc.df$Speech)
-# dnc.df$Speech <- gsub(pattern="ð", replacement="", dnc.df$Speech)
-
-# write.csv(dnc.df, file = "dncFINAL.csv")
-
-set.seed(12345)
 
 # LOAD DATA
 dnc.df <- read.csv("dncFINAL.csv", header = TRUE, fileEncoding = "latin1", stringsAsFactors = F)
