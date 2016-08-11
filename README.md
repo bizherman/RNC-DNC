@@ -39,7 +39,7 @@ List all other files contained in the repo, along with a brief description of ea
 
 #### Code
 
-1. 01_RNCDNCcode: Conducts topic modeling, polarity, and discriminating word analysis on speeches. Includes visualizations of all analyses using wordclouds.
+1. RNCDNCcode: Conducts topic modeling, polarity, and discriminating word analysis on speeches. Includes visualizations of all analyses using wordclouds.
 
 ## More Information
 
