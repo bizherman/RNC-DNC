@@ -1,0 +1,1443 @@
+---
+title: "Final Project PS239T: Polarity"
+author: "Biz Herman"
+date: "December 9, 2015"
+output: html_document
+---
+
+### Setup Environment
+
+```{r message=FALSE}
+setwd("/Users/elizabeth/Google\ Drive/RNC_DNC")
+rm(list=ls())
+
+# load all the required packages
+
+library(tm) # Framework for text mining
+library(RTextTools) # a machine learning package for text classification written in R
+library(qdap) # Quantiative discourse analysis of transcripts
+library(qdapDictionaries)
+library(dplyr) # Data preparation and pipes $>$
+library(ggplot2) # for plotting word frequencies
+library(SnowballC) # for stemming
+library(mallet) # a wrapper around the Java machine learning tool MALLET
+library(wordcloud) # to visualize wordclouds
+library(plyr)
+library(RColorBrewer)
+
+
+```
+
+
+```{r}
+
+# CLEANING THE RNC DATA
+
+# rnc.df <-read.csv("RNC_files.csv", header=TRUE, fileEncoding="latin1", stringsAsFactors = F) #read in CSV file
+# donaldtrump <- rnc.df$Speech[48:49]
+# donaldtrump <- paste(donaldtrump, collapse = "")
+# rnc.df$Speech[48] <- donaldtrump
+# rnc.df$Speech[48]
+# rnc.df <- rnc.df[1:48, ]
+
+# rnc.df$Speech <- gsub(pattern="\n", replacement=" ", rnc.df$Speech)
+# rnc.df$Speech <- gsub(pattern="Ñ", replacement="--", rnc.df$Speech)
+# rnc.df$Speech <- gsub(pattern="U.S.", replacement="United States", rnc.df$Speech)
+# rnc.df$Speech <- gsub(pattern="''Father", replacement="Father", rnc.df$Speech)
+# rnc.df$Speech <- gsub(pattern="''", replacement="", rnc.df$Speech)
+# rnc.df$Speech <- gsub(pattern="Lt. Col.", replacement="Lieutenant Colonel", rnc.df$Speech)
+# rnc.df$Speech <- gsub(pattern="ð", replacement="", rnc.df$Speech)
+
+# write.csv(rnc.df, file = "rncFINAL.csv")
+
+# setting up the RNC corpus
+
+rnc.df <-read.csv("rncFINAL.csv", header=TRUE, fileEncoding="UTF8") #read in CSV file
+rnc <- Corpus(VectorSource(rnc.df$Speech))
+rnc
+
+toSpace <- content_transformer(function(x, pattern) gsub(pattern, " ", x))
+toDash <- content_transformer(function(x, pattern) gsub(pattern, "--", x))
+toUS <- content_transformer(function(x, pattern) gsub(pattern, "United States", x))
+toLtCol <- content_transformer(function(x, pattern) gsub(pattern, "Lt Col", x))
+toWeirdChar <- content_transformer(function(x, pattern) gsub(pattern, "", x))
+
+rnc <- tm_map(rnc, removeWords, stopwords("SMART")) # remove common words
+stopwords("english") # check out what was removed
+rnc <- tm_map(rnc, toSpace, "\n")
+rnc <- tm_map(rnc, toDash, "Ñ")
+rnc <- tm_map(rnc, toUS, "U.S.")
+rnc <- tm_map(rnc, toLtCol, "Lt. Col.")
+rnc <- tm_map(rnc, toWeirdChar, "[^0-9A-Za-z///' ]")
+rnc <- tm_map(rnc, toWeirdChar, "[^[:alnum:]///' ]")
+rnc <- tm_map(rnc, toWeirdChar, "[^[:alnum:][:blank:]+?&/\\-]")
+rnc <- tm_map(rnc, toWeirdChar, "&#242;")
+rnc <- tm_map(rnc, tolower) # Convert to lower-case
+rnc <- tm_map(rnc, removePunctuation) # remove Puncturation
+rnc <- tm_map(rnc, removeNumbers) # remove Numbers
+rnc <- tm_map(rnc, stripWhitespace) # strip white space
+# rnc <- tm_map(rnc, stemDocument) # stem the document
+# toHil <- content_transformer(function(x, pattern) gsub(pattern, "hillary", x))
+# rnc <- tm_map(rnc, toHil, "hillari")
+rnc <- tm_map(rnc, PlainTextDocument) # convert corpus to a Plain Text Document
+
+as.character(rnc[[5]])
+
+trump <- rnc[48]
+pence <- rnc[39]
+dtjr <- rnc[26]
+tiffany <- rnc[25]
+eric <- rnc[35]
+ivanka <- rnc[47]
+christie <- rnc[24]
+melania <- rnc[13]
+rudy <- rnc[12]
+trumpkids <- Corpus(VectorSource(c(tiffany, dtjr, eric, ivanka)))
+trumpfam <- Corpus(VectorSource(c(melania, tiffany, dtjr, eric, ivanka)))
+melivanka <- Corpus(VectorSource(c(melania, ivanka)))
+rep.ticket <- Corpus(VectorSource(c(pence, trump)))
+
+# setting up the DNC corpus
+
+dnc.df <-read.csv("dncFINAL.csv", header=TRUE, fileEncoding="latin1") #read in CSV file
+dnc <- Corpus(VectorSource(dnc.df$Speech))
+dnc
+
+dnc <- tm_map(dnc, removeWords, stopwords("SMART")) # remove common words
+stopwords("english") # check out what was removed
+dnc <- tm_map(dnc, toSpace,  "\n")
+dnc <- tm_map(dnc, toDash, "Ñ")
+dnc <- tm_map(dnc, toUS, "U.S.")
+dnc <- tm_map(dnc, toLtCol, "Lt. Col.")
+dnc <- tm_map(dnc, toWeirdChar, "[^0-9A-Za-z///' ]")
+dnc <- tm_map(dnc, toWeirdChar, "[^[:alnum:]///' ]")
+dnc <- tm_map(dnc, toWeirdChar, "[^[:alnum:][:blank:]+?&/\\-]")
+dnc <- tm_map(dnc, toWeirdChar, "&#242;")
+dnc <- tm_map(dnc, tolower) # Convert to lower-case
+dnc <- tm_map(dnc, removePunctuation) # remove Puncturation
+dnc <- tm_map(dnc, removeNumbers) # remove Numbers
+dnc <- tm_map(dnc, stripWhitespace) # strip white space
+# dnc <- tm_map(dnc, stemDocument) # stem the document
+# toHil <- content_transformer(function(x, pattern) gsub(pattern, "hillary", x))
+# dnc <- tm_map(dnc, toHil, "hillari")
+dnc <- tm_map(dnc, PlainTextDocument) # convert corpus to a Plain Text Document
+
+hillary <- dnc[71]
+kaine <- dnc[60]
+biden <- dnc[53]
+bernie <- dnc[4]
+bill <- dnc[26]
+chelsea <- dnc[63]
+khizr <- dnc[81]
+mobama <- dnc[18]
+obama <- dnc[41]
+
+clintonfam <- Corpus(VectorSource(c(chelsea, bill)))
+dem.ticket <- Corpus(VectorSource(c(hillary, kaine)))
+obamas <- Corpus(VectorSource(c(mobama, obama)))
+
+candidates <- Corpus(VectorSource(c(hillary, trump)))
+
+```
+
+# 3. Document Term Matrices (DTM)
+
+A document term matrix is simply a matrix with documents as the rows and terms as the columns and a count of the frequency of words as the cells of the matrix. 
+
+```{r}
+rnc.dtm <- DocumentTermMatrix(rnc)
+rnc.dtm
+
+trump.dtm <- DocumentTermMatrix(trump)
+pence.dtm <- DocumentTermMatrix(pence)
+dtjr.dtm <- DocumentTermMatrix(dtjr)
+tiffany.dtm <- DocumentTermMatrix(tiffany)
+eric.dtm <- DocumentTermMatrix(eric)
+ivanka.dtm <- DocumentTermMatrix(ivanka)
+christie.dtm <- DocumentTermMatrix(christie)
+melania.dtm <- DocumentTermMatrix(melania)
+rudy.dtm <- DocumentTermMatrix(rudy)
+trumpkids.dtm <- DocumentTermMatrix(trumpkids)
+trumpfam.dtm <- DocumentTermMatrix(trumpfam)
+melivanka.dtm <- DocumentTermMatrix(melivanka)
+rep.ticket.dtm <- DocumentTermMatrix(rep.ticket)
+
+dnc.dtm <- DocumentTermMatrix(dnc)
+dnc.dtm
+
+hillary.dtm <- DocumentTermMatrix(hillary)
+kaine.dtm <- DocumentTermMatrix(kaine)
+biden.dtm <- DocumentTermMatrix(biden)
+bernie.dtm <- DocumentTermMatrix(bernie)
+bill.dtm <- DocumentTermMatrix(bill)
+chelsea.dtm <- DocumentTermMatrix(chelsea)
+khizr.dtm <- DocumentTermMatrix(khizr)
+mobama.dtm <- DocumentTermMatrix(mobama)
+obama.dtm <- DocumentTermMatrix(obama)
+clintonfam.dtm <- DocumentTermMatrix(clintonfam)
+dem.ticket.dtm <- DocumentTermMatrix(dem.ticket)
+obamas.dtm <- DocumentTermMatrix(obamas)
+
+candidates.dtm <- DocumentTermMatrix(candidates)
+
+```
+
+### 4.1 Most and Least Frequent Terms
+
+We can obtain the term frequencies as a vector by converting the document term matrix into a matrix and summing the column counts:
+
+```{r, warning=F, cache=TRUE}
+
+# FOR RNC
+
+# how many terms?
+rnc.freq <- colSums(as.matrix(rnc.dtm))
+length(rnc.freq)
+
+# ordering the frequencies we can list the most frequent terms and the least frequent terms:
+rnc.ord <- order(rnc.freq)
+
+# Least frequent terms
+rnc.freq[head(rnc.ord)]
+
+# most frequent
+rnc.freq[tail(rnc.ord)]
+
+# reorder columns of DTM to show most frequent terms first
+rnc.dtm.ordered <- rnc.dtm[,order(rnc.freq, decreasing = T)]
+inspect(rnc.dtm.ordered[1:5,1:5])
+
+# Exploring word frequences and correlations
+
+# Have a look at common words
+findFreqTerms(rnc.dtm, lowfreq=30) # words that appear at least 50 times
+
+# word correlations
+findAssocs(rnc.dtm, "war", 0.75)
+findAssocs(rnc.dtm, "hillary", 0.6)
+findAssocs(rnc.dtm, "trump", 0.75)
+findAssocs(rnc.dtm, "donald", 0.5)
+
+# plot the most frequent words
+rnc.freq <- sort(colSums(as.matrix(rnc.dtm)),decreasing=TRUE)
+head(rnc.freq)
+
+rnc.wf <- data.frame(word = names(rnc.freq), freq = rnc.freq)
+rnc.wf <- rbind(rnc.wf[1, ], rnc.wf[3:nrow(rnc.wf), ])
+head(rnc.wf)
+
+rnc.freq.sub <- subset(rnc.wf, freq > 20)
+head(rnc.freq.sub)
+
+ggplot(data = rnc.freq.sub, aes(x = word, y = freq)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+set.seed(123)
+wordcloud(rnc.freq.sub$word, rnc.freq.sub$freq, c(2, .3), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+
+#########
+
+# FOR DNC
+
+# how many terms?
+dnc.freq <- colSums(as.matrix(dnc.dtm))
+length(dnc.freq)
+
+# by ordering the frequencies we can list the most frequent terms and the least frequent terms:
+dnc.ord <- order(dnc.freq)
+
+# Least frequent terms
+dnc.freq[head(dnc.ord)]
+
+# most frequent
+dnc.freq[tail(dnc.ord)]
+
+# reorder columns of DTM to show most frequent terms first
+
+dnc.dtm.ordered <- dnc.dtm[,order(dnc.freq, decreasing = T)]
+inspect(dnc.dtm.ordered[1:5,1:5])
+
+# Exploring word frequences and correlations
+
+# Have a look at common words
+findFreqTerms(dnc.dtm, lowfreq=30) # words that appear at least 50 times
+
+# associations
+findAssocs(dnc.dtm, "war", 0.63)
+findAssocs(dnc.dtm, "fear", 0.75)
+
+dnc.assoc.hillary <- as.data.frame(findAssocs(dnc.dtm, "hillary", 0.5))
+wordcloud(rownames(dnc.assoc.hillary), dnc.assoc.hillary[, 1], c(2,.1), rot.per=0, random.order=F, colors = "blue", ordered.colors = T)
+rnc.assoc.hillary <- as.data.frame(findAssocs(rnc.dtm, "hillary", 0.5))
+wordcloud(rownames(rnc.assoc.hillary), rnc.assoc.hillary[, 1], c(2,.1), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+
+dnc.assoc.immigrant <- as.data.frame(findAssocs(dnc.dtm, "immigrants", 0.5))
+wordcloud(rownames(dnc.assoc.immigrant), dnc.assoc.immigrant[, 1], c(2,.1), rot.per=0, random.order=F, colors = "blue", ordered.colors = T)
+rnc.assoc.immigrant <- as.data.frame(findAssocs(rnc.dtm, "immigrants", 0.5))
+wordcloud(rownames(rnc.assoc.immigrant), rnc.assoc.immigrant[, 1], c(2,.1), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+
+dnc.assoc.fear <- as.data.frame(findAssocs(dnc.dtm, "fear", 0.5))
+wordcloud(rownames(dnc.assoc.fear), dnc.assoc.fear[, 1], c(2,.1), rot.per=0, random.order=F, colors = "blue", ordered.colors = T)
+rnc.assoc.fear <- as.data.frame(findAssocs(rnc.dtm, "fear", 0.5))
+wordcloud(rownames(rnc.assoc.fear), rnc.assoc.fear[, 1], c(2,.1), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+
+dnc.assoc.crime <- as.data.frame(findAssocs(dnc.dtm, "crime", 0.5))
+wordcloud(rownames(dnc.assoc.crime), dnc.assoc.crime[, 1], c(2,.1), rot.per=0, random.order=F, colors = "blue", ordered.colors = T)
+rnc.assoc.crime <- as.data.frame(findAssocs(rnc.dtm, "crime", 0.99))
+wordcloud(rownames(rnc.assoc.crime), rnc.assoc.crime[, 1], c(1,.1), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+
+dnc.assoc.wall <- as.data.frame(findAssocs(dnc.dtm, "wall", 0.6))
+wordcloud(rownames(dnc.assoc.wall), dnc.assoc.wall[, 1], c(2,.1), rot.per=0, random.order=F, colors = "blue", ordered.colors = T)
+rnc.assoc.wall <- as.data.frame(findAssocs(rnc.dtm, "wall", 0.9))
+wordcloud(rownames(rnc.assoc.wall), rnc.assoc.wall[, 1], c(2,.1), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+
+# GOOD ONE
+dnc.assoc.illegal <- as.data.frame(findAssocs(dnc.dtm, "illegal", 0.5))
+wordcloud(rownames(dnc.assoc.illegal), dnc.assoc.illegal[, 1], c(2,.1), rot.per=0, random.order=F, colors = "blue", ordered.colors = T)
+rnc.assoc.illegal <- as.data.frame(findAssocs(rnc.dtm, "illegal", 0.9))
+wordcloud(rownames(rnc.assoc.illegal), rnc.assoc.illegal[, 1], c(2,.1), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+
+
+# DNC
+
+dnc.freq <- colSums(as.matrix(dnc.dtm))
+length(dnc.freq)
+dnc.ord <- order(dnc.freq)
+dnc.freq[head(dnc.ord)]
+dnc.freq[tail(dnc.ord)]
+dnc.dtm.ordered <- dnc.dtm[,order(dnc.freq, decreasing = T)]
+findFreqTerms(dnc.dtm, lowfreq=30) # words that appear at least 50 times
+
+dnc.freq <- sort(colSums(as.matrix(dnc.dtm)),decreasing=TRUE)
+head(dnc.freq)
+
+dnc.wf <- data.frame(word = names(dnc.freq), freq = dnc.freq)
+dnc.wf <- dnc.wf[3:nrow(dnc.wf), ]
+head(dnc.wf)
+
+dnc.freq.sub <- subset(dnc.wf, freq > 35)
+
+set.seed(123)
+wordcloud(dnc.freq.sub$word, rnc.freq.sub$freq, c(3,.6), rot.per=0, random.order=F, colors = "blue", ordered.colors = T)
+
+# RNC
+
+rnc.freq <- colSums(as.matrix(rnc.dtm))
+length(rnc.freq)
+rnc.ord <- order(rnc.freq)
+rnc.freq[head(rnc.ord)]
+rnc.freq[tail(rnc.ord)]
+rnc.dtm.ordered <- rnc.dtm[,order(rnc.freq, decreasing = T)]
+findFreqTerms(rnc.dtm, lowfreq=30) # words that appear at least 50 times
+
+rnc.freq <- sort(colSums(as.matrix(rnc.dtm)),decreasing=TRUE)
+head(rnc.freq)
+
+rnc.wf <- data.frame(word = names(rnc.freq), freq = rnc.freq)
+rnc.wf <- rnc.wf[3:nrow(rnc.wf), ]
+head(rnc.wf)
+
+rnc.freq.sub <- subset(rnc.wf, freq > 25)
+
+set.seed(123)
+wordcloud(rnc.freq.sub$word, rnc.freq.sub$freq, c(3,.6), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+
+
+
+# rapid ordering dtm
+# trumpfam
+trumpfam.freq <- colSums(as.matrix(trumpfam.dtm))
+length(trumpfam.freq)
+trumpfam.ord <- order(trumpfam.freq)
+trumpfam.freq[head(trumpfam.ord)]
+trumpfam.freq[tail(trumpfam.ord)]
+trumpfam.dtm.ordered <- trumpfam.dtm[,order(trumpfam.freq, decreasing = T)]
+findFreqTerms(trumpfam.dtm, lowfreq=30) # words that appear at least 50 times
+
+trumpfam.freq <- sort(colSums(as.matrix(trumpfam.dtm)),decreasing=TRUE)
+head(trumpfam.freq)
+
+trumpfam.wf <- data.frame(word = names(trumpfam.freq), freq = trumpfam.freq)
+head(trumpfam.wf)
+
+trumpfam.freq.sub <- subset(trumpfam.wf, freq > 5)
+
+set.seed(123)
+wordcloud(trumpfam.freq.sub$word, rnc.freq.sub$freq, c(4,.8), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+
+# clintonfam
+
+clintonfam.freq <- colSums(as.matrix(clintonfam.dtm))
+length(clintonfam.freq)
+clintonfam.ord <- order(clintonfam.freq)
+clintonfam.freq[head(clintonfam.ord)]
+clintonfam.freq[tail(clintonfam.ord)]
+clintonfam.dtm.ordered <- clintonfam.dtm[,order(clintonfam.freq, decreasing = T)]
+findFreqTerms(clintonfam.dtm, lowfreq=30) # words that appear at least 50 times
+
+clintonfam.freq <- sort(colSums(as.matrix(clintonfam.dtm)),decreasing=TRUE)
+head(clintonfam.freq)
+
+clintonfam.wf <- data.frame(word = names(clintonfam.freq), freq = clintonfam.freq)
+clintonfam.wf <- clintonfam.wf[3:nrow(clintonfam.wf), ]
+head(clintonfam.wf)
+
+clintonfam.freq.sub <- subset(clintonfam.wf, freq > 4)
+
+set.seed(123)
+wordcloud(clintonfam.freq.sub$word, rnc.freq.sub$freq, c(4,.8), rot.per=0, random.order=F, colors = "blue", ordered.colors = T)
+
+
+# how many terms?
+trump.freq <- colSums(as.matrix(trump.dtm))
+length(trump.freq)
+
+trump.ord <- order(trump.freq)
+trump.freq[head(trump.ord)]
+trump.freq[tail(trump.ord)]
+trump.dtm.ordered <- trump.dtm[,order(trump.freq, decreasing = T)]
+inspect(trump.dtm.ordered[,1:4])
+findFreqTerms(trump.dtm, lowfreq=30) # words that appear at least 50 times
+trump.freq <- sort(colSums(as.matrix(trump.dtm)),decreasing=TRUE)
+head(trump.freq)
+
+trump.wf <- data.frame(word = names(trump.freq), freq = trump.freq)
+trump.wf <- rbind(trump.wf[1:3, ], trump.wf[6:nrow(trump.wf), ])
+head(trump.wf)
+
+trump.freq.sub <- subset(trump.wf, freq > 8)
+head(trump.freq.sub)
+
+ggplot(data = trump.freq.sub, aes(x = word, y = freq)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+set.seed(123)
+wordcloud(trump.freq.sub$word, trump.freq.sub$freq, c(2,.5), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+
+# FOR HILLARY
+hillary.freq <- colSums(as.matrix(hillary.dtm))
+length(hillary.freq)
+hillary.ord <- order(hillary.freq)
+hillary.freq[head(hillary.ord)]
+hillary.freq[tail(hillary.ord)]
+hillary.dtm.ordered <- hillary.dtm[,order(hillary.freq, decreasing = T)]
+inspect(hillary.dtm.ordered[,1:4])
+findFreqTerms(hillary.dtm, lowfreq=10) # words that appear at least 50 times
+
+hillary.freq <- sort(colSums(as.matrix(hillary.dtm)),decreasing=TRUE)
+hillary.wf <- data.frame(word = names(hillary.freq), freq = hillary.freq)
+hillary.wf <- hillary.wf[2:nrow(hillary.wf), ]
+head(hillary.wf)
+
+hillary.freq.sub <- subset(hillary.wf, freq > 4)
+head(hillary.freq.sub)
+
+ggplot(data = hillary.freq.sub, aes(x = word, y = freq)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+set.seed(1)
+wordcloud(hillary.freq.sub$word, hillary.freq.sub$freq, c(3, .7), rot.per=0, random.order=F, colors = "blue", ordered.colors = T)
+
+# FOR THE PARTY TIX
+
+rep.ticket.freq <- colSums(as.matrix(rep.ticket.dtm))
+length(rep.ticket.freq)
+rep.ticket.ord <- order(rep.ticket.freq)
+rep.ticket.freq[head(rep.ticket.ord)]
+rep.ticket.freq[tail(rep.ticket.ord)]
+rep.ticket.dtm.ordered <- rep.ticket.dtm[,order(rep.ticket.freq, decreasing = T)]
+inspect(rep.ticket.dtm.ordered[,1:4])
+findFreqTerms(rep.ticket.dtm, lowfreq=10) # words that appear at least 50 times
+
+rep.ticket.freq <- sort(colSums(as.matrix(rep.ticket.dtm)),decreasing=TRUE)
+rep.ticket.wf <- data.frame(word = names(rep.ticket.freq), freq = rep.ticket.freq)
+rep.ticket.wf <- rbind(rep.ticket.wf[1:3, ], rep.ticket.wf[6:nrow(rep.ticket.wf), ])
+head(rep.ticket.wf)
+
+rep.ticket.freq.sub <- subset(rep.ticket.wf, freq > 8)
+head(rep.ticket.freq.sub)
+
+ggplot(data = rep.ticket.freq.sub, aes(x = word, y = freq)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+set.seed(1)
+wordcloud(rep.ticket.freq.sub$word, rep.ticket.freq.sub$freq, c(3, .7), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+
+
+dem.ticket.freq <- colSums(as.matrix(dem.ticket.dtm))
+length(dem.ticket.freq)
+dem.ticket.ord <- order(dem.ticket.freq)
+dem.ticket.freq[head(dem.ticket.ord)]
+dem.ticket.freq[tail(dem.ticket.ord)]
+dem.ticket.dtm.ordered <- dem.ticket.dtm[,order(dem.ticket.freq, decreasing = T)]
+inspect(dem.ticket.dtm.ordered[,1:4])
+findFreqTerms(dem.ticket.dtm, lowfreq=10) # words that appear at least 50 times
+
+dem.ticket.freq <- sort(colSums(as.matrix(dem.ticket.dtm)),decreasing=TRUE)
+dem.ticket.wf <- data.frame(word = names(dem.ticket.freq), freq = dem.ticket.freq)
+dem.ticket.wf <- dem.ticket.wf[2:nrow(clintonfam.wf), ]
+head(dem.ticket.wf)
+
+dem.ticket.freq.sub <- subset(dem.ticket.wf, freq > 5)
+head(dem.ticket.freq.sub)
+
+ggplot(data = dem.ticket.freq.sub, aes(x = word, y = freq)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+set.seed(1)
+wordcloud(dem.ticket.freq.sub$word, dem.ticket.freq.sub$freq, c(3, .7), rot.per=0, random.order=F, colors = "blue", ordered.colors = T)
+
+# KHZIR KHAN
+
+khizr.freq <- colSums(as.matrix(khizr.dtm))
+length(khizr.freq)
+khizr.ord <- order(khizr.freq)
+khizr.freq[head(khizr.ord)]
+khizr.freq[tail(khizr.ord)]
+khizr.dtm.ordered <- khizr.dtm[,order(khizr.freq, decreasing = T)]
+inspect(khizr.dtm.ordered[,1:4])
+khizr.freq <- sort(colSums(as.matrix(khizr.dtm)),decreasing=TRUE)
+khizr.wf <- data.frame(word = names(khizr.freq), freq = khizr.freq)
+head(khizr.wf)
+
+khizr.wf.sub <- subset(khizr.wf, freq > 1)
+
+ggplot(data = khizr.wf.sub, aes(x = word, y = freq)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+set.seed(12345)
+wordcloud(khizr.wf$word, khizr.wf$freq, c(3, .2), rot.per=0, random.order=F, colors = "blue", max.words = 50, ordered.colors = T)
+
+# CHRIS CHRISTIE
+
+christie.freq <- colSums(as.matrix(christie.dtm))
+length(christie.freq)
+christie.ord <- order(christie.freq)
+christie.freq[head(christie.ord)]
+christie.freq[tail(christie.ord)]
+christie.dtm.ordered <- christie.dtm[,order(christie.freq, decreasing = T)]
+inspect(christie.dtm.ordered[,1:4])
+christie.freq <- sort(colSums(as.matrix(christie.dtm)),decreasing=TRUE)
+christie.wf <- data.frame(word = names(christie.freq), freq = christie.freq)
+head(christie.wf)
+
+christie.wf.sub <- subset(christie.wf, freq > 1)
+
+ggplot(data = christie.wf.sub, aes(x = word, y = freq)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+set.seed(12345)
+wordcloud(christie.wf$word, christie.wf$freq, c(3, .6), rot.per=0, random.order=F, colors = "red", max.words = 50, ordered.colors = T)
+
+# MIKE PENCE
+
+pence.freq <- colSums(as.matrix(pence.dtm))
+length(pence.freq)
+pence.ord <- order(pence.freq)
+pence.freq[head(pence.ord)]
+pence.freq[tail(pence.ord)]
+pence.dtm.ordered <- pence.dtm[,order(pence.freq, decreasing = T)]
+inspect(pence.dtm.ordered[,1:4])
+pence.freq <- sort(colSums(as.matrix(pence.dtm)),decreasing=TRUE)
+pence.wf <- data.frame(word = names(pence.freq), freq = pence.freq)
+head(pence.wf)
+
+pence.wf.sub <- subset(pence.wf, freq > 2)
+
+ggplot(data = pence.wf.sub, aes(x = word, y = freq)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+set.seed(12345)
+wordcloud(pence.wf$word, pence.wf$freq, c(3, .6), rot.per=0, random.order=F, colors = "red", max.words = 50, ordered.colors = T)
+
+# BILL CLINTON
+
+bill.freq <- colSums(as.matrix(bill.dtm))
+length(bill.freq)
+bill.ord <- order(bill.freq)
+bill.freq[head(bill.ord)]
+bill.freq[tail(bill.ord)]
+bill.dtm.ordered <- bill.dtm[,order(bill.freq, decreasing = T)]
+inspect(bill.dtm.ordered[,1:4])
+bill.freq <- sort(colSums(as.matrix(bill.dtm)),decreasing=TRUE)
+bill.wf <- data.frame(word = names(bill.freq), freq = bill.freq)
+bill.wf <- bill.wf[3:nrow(bill.wf), ]
+head(bill.wf)
+
+bill.wf.sub <- subset(bill.wf, freq > 1)
+head(bill.wf)
+
+ggplot(data = bill.wf.sub, aes(x = word, y = freq)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+set.seed(12345)
+wordcloud(bill.wf.sub$word, bill.wf.sub$freq, c(3, .6), rot.per=0, random.order=F, colors = "blue", max.words = 50, ordered.colors = T)
+
+# CHELSEA
+
+chelsea.freq <- colSums(as.matrix(chelsea.dtm))
+length(chelsea.freq)
+chelsea.ord <- order(chelsea.freq)
+chelsea.freq[head(chelsea.ord)]
+chelsea.freq[tail(chelsea.ord)]
+chelsea.dtm.ordered <- chelsea.dtm[,order(chelsea.freq, decreasing = T)]
+inspect(chelsea.dtm.ordered[,1:4])
+chelsea.freq <- sort(colSums(as.matrix(chelsea.dtm)),decreasing=TRUE)
+chelsea.wf <- data.frame(word = names(chelsea.freq), freq = chelsea.freq)
+chelsea.wf <- rbind(chelsea.wf[1:2, ], chelsea.wf[4:nrow(chelsea.wf), ])
+head(chelsea.wf)
+
+chelsea.wf.sub <- subset(chelsea.wf, freq > 1)
+head(chelsea.wf.sub)
+
+ggplot(data = chelsea.wf.sub, aes(x = word, y = freq)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+set.seed(12345)
+wordcloud(chelsea.wf$word, chelsea.wf$freq, c(3, .6), rot.per=0, random.order=F, colors = "blue", ordered.colors = T)
+
+# IVANKA
+
+ivanka.freq <- colSums(as.matrix(ivanka.dtm))
+length(ivanka.freq)
+ivanka.ord <- order(ivanka.freq)
+ivanka.freq[head(ivanka.ord)]
+ivanka.freq[tail(ivanka.ord)]
+ivanka.dtm.ordered <- ivanka.dtm[,order(ivanka.freq, decreasing = T)]
+inspect(ivanka.dtm.ordered[,1:4])
+ivanka.freq <- sort(colSums(as.matrix(ivanka.dtm)),decreasing=TRUE)
+ivanka.wf <- data.frame(word = names(ivanka.freq), freq = ivanka.freq)
+head(ivanka.wf)
+
+ivanka.wf.sub <- subset(ivanka.wf, freq > 1)
+head(ivanka.wf.sub)
+
+ggplot(data = ivanka.wf.sub, aes(x = word, y = freq)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+set.seed(12345)
+wordcloud(ivanka.wf.sub$word, ivanka.wf.sub$freq, c(3, .6), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+
+# MELANIA
+
+melania.freq <- colSums(as.matrix(melania.dtm))
+length(melania.freq)
+melania.ord <- order(melania.freq)
+melania.freq[head(melania.ord)]
+melania.freq[tail(melania.ord)]
+melania.dtm.ordered <- melania.dtm[,order(melania.freq, decreasing = T)]
+inspect(melania.dtm.ordered[,1:4])
+melania.freq <- sort(colSums(as.matrix(melania.dtm)),decreasing=TRUE)
+melania.wf <- data.frame(word = names(melania.freq), freq = melania.freq)
+head(melania.wf)
+
+melania.wf.sub <- subset(melania.wf, freq > 1)
+head(melania.wf.sub)
+
+ggplot(data = melania.wf.sub, aes(x = word, y = freq)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+set.seed(12345)
+wordcloud(melania.wf.sub$word, melania.wf.sub$freq, c(3, .6), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+
+# TRUMP KIDS
+
+trumpkids.freq <- colSums(as.matrix(trumpkids.dtm))
+length(trumpkids.freq)
+trumpkids.ord <- order(trumpkids.freq)
+trumpkids.freq[head(trumpkids.ord)]
+trumpkids.freq[tail(trumpkids.ord)]
+trumpkids.dtm.ordered <- trumpkids.dtm[,order(trumpkids.freq, decreasing = T)]
+inspect(trumpkids.dtm.ordered[,1:4])
+trumpkids.freq <- sort(colSums(as.matrix(trumpkids.dtm)),decreasing=TRUE)
+trumpkids.wf <- data.frame(word = names(trumpkids.freq), freq = trumpkids.freq)
+head(trumpkids.wf)
+
+trumpkids.wf.sub <- subset(trumpkids.wf, freq > 4)
+head(trumpkids.wf.sub)
+
+ggplot(data = trumpkids.wf.sub, aes(x = word, y = freq)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+set.seed(12345)
+wordcloud(trumpkids.wf.sub$word, trumpkids.wf.sub$freq, c(3, .6), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+
+# OBAMA
+
+obama.freq <- colSums(as.matrix(obama.dtm))
+length(obama.freq)
+obama.ord <- order(obama.freq)
+obama.freq[head(obama.ord)]
+obama.freq[tail(obama.ord)]
+obama.dtm.ordered <- obama.dtm[,order(obama.freq, decreasing = T)]
+inspect(obama.dtm.ordered[,1:4])
+obama.freq <- sort(colSums(as.matrix(obama.dtm)),decreasing=TRUE)
+obama.wf <- data.frame(word = names(obama.freq), freq = obama.freq)
+obama.wf <- obama.wf[2:nrow(obama.wf), ]
+head(obama.wf)
+
+obama.wf.sub <- subset(obama.wf, freq > 3)
+head(obama.wf.sub)
+
+ggplot(data = obama.wf.sub, aes(x = word, y = freq)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+set.seed(12345)
+wordcloud(obama.wf.sub$word, obama.wf.sub$freq, c(3, .6), rot.per=0, random.order=F, colors = "blue", ordered.colors = T)
+
+# BERNIE
+
+bernie.freq <- colSums(as.matrix(bernie.dtm))
+length(bernie.freq)
+bernie.ord <- order(bernie.freq)
+bernie.freq[head(bernie.ord)]
+bernie.freq[tail(bernie.ord)]
+bernie.dtm.ordered <- bernie.dtm[,order(bernie.freq, decreasing = T)]
+inspect(bernie.dtm.ordered[,1:4])
+bernie.freq <- sort(colSums(as.matrix(bernie.dtm)),decreasing=TRUE)
+bernie.wf <- data.frame(word = names(bernie.freq), freq = bernie.freq)
+bernie.wf <- rbind(bernie.wf[1:4, ], bernie.wf[6:nrow(bernie.wf), ])
+head(bernie.wf)
+
+bernie.wf.sub <- subset(bernie.wf, freq > 2)
+head(bernie.wf.sub)
+
+ggplot(data = bernie.wf.sub, aes(x = word, y = freq)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+set.seed(12345)
+wordcloud(bernie.wf.sub$word, bernie.wf.sub$freq, c(3, .6), rot.per=0, random.order=F, colors = "blue", ordered.colors = T)
+
+# ordered hillary(1), trump(2)
+cand.m <- as.data.frame(as.matrix(candidates.dtm))
+
+# Subset into 2 dtms for each author
+hillary.m <- cand.m[1,]
+trump.m <- cand.m[2,]
+
+# Sum word usage counts across all texts
+hillary.m <- colSums(hillary.m)
+trump.m <- colSums(trump.m)
+
+# Put those sums back into a dataframe
+cand.df <- data.frame(rbind(hillary.m, trump.m))
+cand.df[,1:5]
+
+solelyHillary <- unlist(cand.df[1,trump.m==0])
+solelyHillary <- solelyHillary[order(solelyHillary, decreasing = T)]
+solelyHillary2 <- as.data.frame(solelyHillary)
+solely.hillary.words <- rownames(solelyHillary2)
+solely.hillary.words
+
+solelyTrump <- unlist(cand.df[2,hillary.m==0])
+solelyTrump <- solelyTrump[order(solelyTrump, decreasing = T)]
+solely.trump2 <- as.data.frame(solelyTrump)
+solelytrump.words <- rownames(solely.trump2)
+solelytrump.words
+
+# words that are common to both
+cand.df2 <- cand.df[,hillary.m>0 & trump.m>0]
+head(cand.df2)
+
+# normalize into proportions
+rowTotals2 <- rowSums(cand.df2) #create column with row totals, total number of words per document
+head(rowTotals2)
+cand.df2.prop <- cand.df2/rowTotals2 #change frequencies to proportions
+cand.df2.prop[,1:5] # how we have proportions.
+means.hillary2 <- cand.df2.prop[1,]
+means.trump2 <- cand.df2.prop[2,]
+score2 <- unlist(means.hillary2 - means.trump2)
+
+# find words with highest difference
+score2 <- sort(score2)
+head(score2,100) # top trump words
+tail(score2,100) # top hillary words
+means.all <- colMeans(cand.df2)
+score <- unlist((means.hillary2 - means.trump2) / means.all)
+score <- sort(score)
+top.trump <- head(score,50) # top trump words
+top.trump2 <- as.data.frame(top.trump)
+top.trump.words <- rownames(top.trump2)
+top.trump.words
+
+top.hillary <- tail(score,50) # top hillary words
+top.hillary2 <- as.data.frame(top.hillary)
+top.hillary.words <- rownames(top.hillary2)
+top.hillary.words
+
+```
+
+# Topic Modeling Analysis
+
+Now we're going to look at the polarity of the speeches.
+
+```{r, warning=FALSE}
+
+set.seed(123)
+
+# LOAD DATA
+rnc.df <- read.csv("rncFINAL.csv", header = TRUE, fileEncoding = "latin1", stringsAsFactors = F)
+
+# we first have to create an 'id' column
+rnc.df$id <- rownames(rnc.df)
+
+# remove punctuation
+rnc.df$Speech <- gsub(pattern="[[:punct:]]", replacement=" ", rnc.df$Speech)
+rnc.df$Speech <- gsub(pattern="[^0-9A-Za-z///' ]", replacement=" ", rnc.df$Speech)
+rnc.df$Speech <- gsub(pattern="[^[:alnum:]///' ]", replacement=" ", rnc.df$Speech)
+rnc.df$Speech <- gsub(pattern="&#242;", replacement=" ", rnc.df$Speech)
+rnc.df$Speech <- gsub(pattern="[^[:alnum:][:blank:]+?&/\\-]", replacement=" ", rnc.df$Speech)
+rnc.df$Speech <- gsub(pattern="kind", replacement="Benghazi", rnc.df$Speech)
+
+# load data into mallet
+mallet.instances <- mallet.import(rnc.df$id, rnc.df$Speech, "stoplist.csv", FALSE, token.regexp="[\\p{L}']+")
+
+# choose the number of topics to model
+n.topics = 20
+
+# create a topic trainer object
+topic.model <- MalletLDA(n.topics)
+
+# load the documents
+topic.model$loadDocuments(mallet.instances)
+
+# get the vocabulary, and some statistics about word frequencies; after running this code once through, i went back and re-curated the stop word lists, to remove some of the more frequently used words that weren't otherwise caught
+vocabulary <- topic.model$getVocabulary()
+word.freqs <- mallet.word.freqs(topic.model)
+
+# examine some of the vocabulary
+word.freqs[1:50,]
+
+# the most frequently used words
+word.freqs.ordered <- word.freqs[order(-word.freqs$term.freq), ]
+head(word.freqs.ordered)
+
+# optimize hyperparameters every 20 iterations, after 50 burn-in iterations
+topic.model$setAlphaOptimization(20, 50)
+
+# now train a model, specifying the number of iterations
+topic.model$train(500)
+
+# get the probability of topics in documents and the probability of words in topics; by default the functions return word counts, so to get the probabilities we can normalize and add smoothing, in order to ensure that nothing has a probability of exactly 0
+doc.topics <- mallet.doc.topics(topic.model, smoothed=T, normalized=T)
+topic.words <- mallet.topic.words(topic.model, smoothed=T, normalized=T)
+
+# what are the top words in topic 5?
+mallet.top.words(topic.model, topic.words[4,])
+
+# create a vector containing short names for the topics
+topics.labels <- rep("", n.topics)
+for (topic in 1:n.topics) topics.labels[topic] <- paste(mallet.top.words(topic.model, topic.words[topic,], num.top.words=10)$words, collapse=" ")
+
+# have a look at keywords for each topic
+topics.labels
+
+# We can represent this relationship visually, as follows:
+
+# with the wordcloud package
+num.topics<-20
+num.top.words<-50
+for(i in 1:num.topics){
+  topic.top.words <- mallet.top.words(topic.model, topic.words[i,], num.top.words)
+  wordcloud(topic.top.words$words, topic.top.words$weights, c(3,.6), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+}
+
+# DNC ANALYSIS, CLEANING DNC DATA
+
+# dnc.df <-read.csv("DNC_files.csv", header=TRUE, fileEncoding="latin1", stringsAsFactors = F) #read in CSV file
+
+# dnc.df$Speech <- gsub(pattern="\n", replacement=" ", dnc.df$Speech)
+# dnc.df$Speech <- gsub(pattern="Ñ", replacement="--", dnc.df$Speech)
+# dnc.df$Speech <- gsub(pattern="U.S.", replacement="United States", dnc.df$Speech)
+# dnc.df$Speech <- gsub(pattern="''Father", replacement="Father", dnc.df$Speech)
+# dnc.df$Speech <- gsub(pattern="''", replacement="", dnc.df$Speech)
+# dnc.df$Speech <- gsub(pattern="Lt. Col.", replacement="Lieutenant Colonel", dnc.df$Speech)
+# dnc.df$Speech <- gsub(pattern="ð", replacement="", dnc.df$Speech)
+
+# write.csv(dnc.df, file = "dncFINAL.csv")
+
+set.seed(12345)
+
+# LOAD DATA
+dnc.df <- read.csv("dncFINAL.csv", header = TRUE, fileEncoding = "latin1", stringsAsFactors = F)
+
+# we first have to create an 'id' column
+dnc.df$id <- rownames(dnc.df)
+
+# remove punctuation
+dnc.df$Speech <- gsub(pattern="[[:punct:]]", replacement=" ", dnc.df$Speech)
+dnc.df$Speech <- gsub(pattern="[^0-9A-Za-z///' ]", replacement=" ", dnc.df$Speech)
+dnc.df$Speech <- gsub(pattern="[^[:alnum:]///' ]", replacement=" ", dnc.df$Speech)
+dnc.df$Speech <- gsub(pattern="&#242;", replacement=" ", dnc.df$Speech)
+dnc.df$Speech <- gsub(pattern="[^[:alnum:][:blank:]+?&/\\-]", replacement=" ", dnc.df$Speech)
+  
+
+# load data into mallet
+mallet.instances <- mallet.import(dnc.df$id, dnc.df$Speech, "stoplist.csv", FALSE, token.regexp="[\\p{L}']+")
+
+# choose the number of topics to model
+n.topics = 21
+
+# create a topic trainer object
+topic.model <- MalletLDA(n.topics)
+
+# load the documents
+topic.model$loadDocuments(mallet.instances)
+
+# get the vocabulary, and some statistics about word frequencies; after running this code once through, i went back and re-curated the stop word lists, to remove some of the more frequently used words that weren't otherwise caught
+vocabulary <- topic.model$getVocabulary()
+word.freqs <- mallet.word.freqs(topic.model)
+
+# examine some of the vocabulary
+word.freqs[1:50,]
+
+# the most frequently used words
+word.freqs.ordered <- word.freqs[order(-word.freqs$term.freq), ]
+head(word.freqs.ordered)
+
+# optimize hyperparameters every 20 iterations, after 50 burn-in iterations
+topic.model$setAlphaOptimization(20, 50)
+
+# now train a model, specifying the number of iterations
+topic.model$train(100)
+
+# get the probability of topics in documents and the probability of words in topics; by default the functions return word counts, so to get the probabilities we can normalize and add smoothing, in order to ensure that nothing has a probability of exactly 0
+doc.topics <- mallet.doc.topics(topic.model, smoothed=T, normalized=T)
+topic.words <- mallet.topic.words(topic.model, smoothed=T, normalized=T)
+
+# what are the top words in topic 5?
+mallet.top.words(topic.model, topic.words[4,])
+
+# create a vector containing short names for the topics
+topics.labels <- rep("", n.topics)
+for (topic in 1:n.topics) topics.labels[topic] <- paste(mallet.top.words(topic.model, topic.words[topic,], num.top.words=10)$words, collapse=" ")
+
+# have a look at keywords for each topic
+topics.labels
+
+num.topics<-21
+num.top.words<-50
+for(i in 1:num.topics){
+  topic.top.words <- mallet.top.words(topic.model, topic.words[i,], num.top.words)
+  wordcloud(topic.top.words$words, topic.top.words$weights, c(3,.6), rot.per=0, random.order=F, colors = "blue", ordered.colors = T)
+}
+
+```
+
+
+```{r, warning=FALSE}
+
+trump.speech <- rnc.df[48, ]
+pence.speech <- rnc.df[39, ]
+dtjr.speech <- rnc.df[26, ]
+tiffany.speech <- rnc.df[25, ]
+eric.speech <- rnc.df[35, ]
+ivanka.speech <- rnc.df[47, ]
+christie.speech <- rnc.df[24, ]
+melania.speech <- rnc.df[13, ]
+rudy.speech <- rnc.df[12, ]
+cruz.speech <- rnc.df[37, ]
+mitch.speech <- rnc.df[20, ]
+ryan.speech <- rnc.df[21, ]
+reluctants.speech <- rbind(cruz.speech, mitch.speech, ryan.speech)
+trumpkids.speech <- rbind(tiffany.speech, dtjr.speech, eric.speech, ivanka.speech)
+trumpfam.speech <- rbind(melania.speech, tiffany.speech, dtjr.speech, eric.speech, ivanka.speech)
+melivanka.speech <- rbind(melania.speech, ivanka.speech)
+rep.ticket.speech <- rbind(pence.speech, trump.speech)
+
+hillary.speech <- dnc.df[71, ]
+kaine.speech <- dnc.df[60, ]
+biden.speech <- dnc.df[53, ]
+bernie.speech <- dnc.df[4, ]
+bill.speech <- dnc.df[26, ]
+chelsea.speech <- dnc.df[63, ]
+khizr.speech <- dnc.df[81, ]
+mobama.speech <- dnc.df[18, ]
+obama.speech <- dnc.df[41, ]
+
+clintonfam.speech <- rbind(chelsea.speech, bill.speech)
+dem.ticket.speech <- rbind(hillary.speech, kaine.speech)
+obamas.speech <- rbind(mobama.speech, obama.speech)
+
+candidates.speech <- rbind(hillary.speech, trump.speech)
+
+# TRUMP FAMILY SPEECH TOPICS 
+
+set.seed(123)
+
+# load data into mallet
+mallet.instances <- mallet.import(trumpfam.speech$id, trumpfam.speech$Speech, "stoplist.csv", FALSE, token.regexp="[\\p{L}']+")
+
+# choose the number of topics to model
+n.topics = 8
+
+topic.model <- MalletLDA(n.topics)
+topic.model$loadDocuments(mallet.instances)
+vocabulary <- topic.model$getVocabulary()
+word.freqs <- mallet.word.freqs(topic.model)
+word.freqs[1:50,]
+word.freqs.ordered <- word.freqs[order(-word.freqs$term.freq), ]
+head(word.freqs.ordered)
+topic.model$setAlphaOptimization(20, 50)
+topic.model$train(100)
+doc.topics <- mallet.doc.topics(topic.model, smoothed=T, normalized=T)
+topic.words <- mallet.topic.words(topic.model, smoothed=T, normalized=T)
+mallet.top.words(topic.model, topic.words[4,])
+topics.labels <- rep("", n.topics)
+for (topic in 1:n.topics) topics.labels[topic] <- paste(mallet.top.words(topic.model, topic.words[topic,], num.top.words=10)$words, collapse=" ")
+topics.labels
+
+num.topics<-8
+num.top.words<-50
+for(i in 1:num.topics){
+  topic.top.words <- mallet.top.words(topic.model, topic.words[i,], num.top.words)
+  wordcloud(topic.top.words$words, topic.top.words$weights, c(3,.6), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+}
+
+
+# RELUCTANTS' SPEECH TOPICS 
+
+set.seed(123)
+
+# load data into mallet
+mallet.instances <- mallet.import(reluctants.speech$id, reluctants.speech$Speech, "stoplist.csv", FALSE, token.regexp="[\\p{L}']+")
+
+# choose the number of topics to model
+n.topics = 8
+
+topic.model <- MalletLDA(n.topics)
+topic.model$loadDocuments(mallet.instances)
+vocabulary <- topic.model$getVocabulary()
+word.freqs <- mallet.word.freqs(topic.model)
+word.freqs[1:50,]
+word.freqs.ordered <- word.freqs[order(-word.freqs$term.freq), ]
+head(word.freqs.ordered)
+topic.model$setAlphaOptimization(20, 50)
+topic.model$train(100)
+doc.topics <- mallet.doc.topics(topic.model, smoothed=T, normalized=T)
+topic.words <- mallet.topic.words(topic.model, smoothed=T, normalized=T)
+mallet.top.words(topic.model, topic.words[4,])
+topics.labels <- rep("", n.topics)
+for (topic in 1:n.topics) topics.labels[topic] <- paste(mallet.top.words(topic.model, topic.words[topic,], num.top.words=10)$words, collapse=" ")
+topics.labels
+
+num.topics<-8
+num.top.words<-50
+for(i in 1:num.topics){
+  topic.top.words <- mallet.top.words(topic.model, topic.words[i,], num.top.words)
+  wordcloud(topic.top.words$words, topic.top.words$weights, c(3,.6), rot.per=0, random.order=F, colors = "red", ordered.colors = T)
+}
+
+```
+
+# Polarity Analysis
+
+```{r, cache = TRUE, warning=FALSE}
+
+# load the libraries we will need for this section
+library(qdap) # quantiative discourse analysis of transcripts
+library(data.table) # for easier data manipulation
+library(scales) # to help us plot
+library(plyr)
+library(data.table)
+library(ggplot2)
+library(scales)
+
+# FOR THE RNC
+
+# split the texts into individual sentences
+rnc.test <- read.csv("rncFINAL.csv", header=TRUE, fileEncoding="latin1", stringsAsFactors = F) #read in CSV file
+rnc.test <- rnc.test[, 2:3]
+rnc.test$Speech <- gsub(pattern="\n", replacement=" ", rnc.test$Speech)
+rnc.test$Speech <- gsub(pattern="Ñ", replacement="--", rnc.test$Speech)
+rnc.test$Speech <- gsub(pattern="U.S.", replacement="United States", rnc.test$Speech)
+rnc.test$Speech <- gsub(pattern="Lt. Col.", replacement="Lieutenant Colonel", rnc.test$Speech)
+
+rnc.split <- sentSplit(rnc.test, "Speech")
+head(as.character(rnc.split[[3]]))
+
+# look at the result
+head(truncdf(rnc.split), 10)
+
+# calculate polarity / sentiment of each line
+rnc.dat <- with(rnc.split, polarity(Speech, Speaker))
+
+# look at the results
+counts(rnc.dat)[1:10,]
+jeffsessions <- mean(rnc.dat$all$Speaker=="Jeff Sessions")
+donaldtrump <- mean(rnc.dat$all$Speaker=="Donald Trump")
+
+rnc.plot <- data.frame(Speaker = rnc.dat$group$Speaker, pol = rnc.dat$group$ave.polarity)
+
+ggplot(data = rnc.plot, aes(x = Speaker, y = pol)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0) + coord_cartesian(ylim=c(-0.3,0.3))
+
+# readability
+rnc.data <- as.data.table(rnc.split)
+rnc.read <- automated_readability_index(rnc.data$Speech, rnc.data$Speaker)
+rnc.read2 <- flesch_kincaid(rnc.data$Speech, rnc.data$Speaker)
+
+speaker <- rnc.read2$Readability[, 1]
+readability <- as.numeric(rnc.read2$Readability[, 5])
+
+rnc.read.plot <- as.data.frame(readability)
+rownames(rnc.read.plot) <- speaker
+
+ggplot(data = rnc.read.plot, aes(x = speaker, y = readability)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+
+# FOR THE DNC
+
+# split the texts into individual sentences
+dnc.test <- read.csv("dncFINAL.csv", header=TRUE, fileEncoding="latin1", stringsAsFactors = F) #read in CSV file
+dnc.test <- dnc.test[, 2:3]
+dnc.test$Speech <- gsub(pattern="\n", replacement=" ", dnc.test$Speech)
+dnc.test$Speech <- gsub(pattern="Ñ", replacement="--", dnc.test$Speech)
+dnc.test$Speech <- gsub(pattern="U.S.", replacement="United States", dnc.test$Speech)
+dnc.test$Speech <- gsub(pattern="Lt. Col.", replacement="Lieutenant Colonel", dnc.test$Speech)
+
+dnc.split <- sentSplit(dnc.test, "Speech")
+head(as.character(dnc.split[[3]]))
+
+# look at the result
+head(truncdf(dnc.split), 10)
+
+# calculate polarity / sentiment of each line
+dnc.dat <- with(dnc.split, polarity(Speech, Speaker))
+
+# look at the results
+counts(dnc.dat)[1:10,]
+
+dnc.plot <- data.frame(Speaker = dnc.dat$group$Speaker, pol = dnc.dat$group$ave.polarity)
+
+ggplot(data = dnc.plot, aes(x = Speaker, y = pol)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0) + coord_cartesian(ylim=c(-0.3,0.3))
+
+# readability
+dnc.data <- as.data.table(dnc.split)
+dnc.read <- automated_readability_index(dnc.data$Speech, dnc.data$Speaker)
+dnc.read2 <- flesch_kincaid(dnc.data$Speech, dnc.data$Speaker)
+
+speaker <- dnc.read2$Readability[, 1]
+readability <- as.numeric(dnc.read2$Readability[, 5])
+
+dnc.read.plot <- as.data.frame(readability)
+rownames(dnc.read.plot) <- speaker
+
+ggplot(data = dnc.read.plot, aes(x = speaker, y = readability)) + geom_point() +
+  theme(axis.text.x = element_text(angle = -90)) + geom_hline(yintercept = 0)
+
+
+# SPECIFICALLY FOR TRUMP
+dt.sentences <- as.data.table(rnc.split[rnc.split$Speaker=="Donald Trump", ])
+dt.sentences[, sentence.num := seq(nrow(dt.sentences))]
+dt.sentences[, person := dt.sentences$Speaker]
+setcolorder(dt.sentences, c("sentence.num", "Speech", "Speaker", "person", "tot"))
+
+# Syllables per sentence
+dt.sentences[, syllables := syllable_sum(dt.sentences$Speech)]
+# Add cumulative syllable count and percent complete as proxy for progression
+dt.sentences[, syllables.cumsum := cumsum(dt.sentences$syllables)]
+dt.sentences[, pct.complete := dt.sentences$syllables.cumsum / sum(dt.sentences$syllables)]
+dt.sentences[, pct.complete.100 := dt.sentences$pct.complete * 100]
+
+# calculating polarity
+dt.pol.df <- polarity(dt.sentences$Speech)$all
+dt.sentences[, words := dt.pol.df$wc]
+dt.sentences[, pol := dt.pol.df$polarity]
+
+my.theme <- 
+  theme(plot.background = element_blank(), # Remove background
+        panel.grid.major = element_blank(), # Remove gridlines
+        panel.grid.minor = element_blank(), # Remove more gridlines
+        panel.border = element_blank(), # Remove border
+        panel.background = element_blank(), # Remove more background
+        axis.ticks = element_blank(), # Remove axis ticks
+        axis.text=element_text(size=14), # Enlarge axis text font
+        axis.title=element_text(size=16), # Enlarge axis title font
+        plot.title=element_text(size=18, hjust=0)) # Enlarge, left-align title
+
+CustomScatterPlot <- function(gg)
+  return(gg + geom_point(color="grey60") + # Lighten dots
+           stat_smooth(color="royalblue", fill="lightgray", size=1.4) + 
+           xlab("Percent complete (by syllable count)") + 
+           scale_x_continuous(labels = percent) + my.theme)
+
+CustomScatterPlot(ggplot(dt.sentences, aes(pct.complete, pol)) +
+                    ylab("Sentiment (sentence-level polarity)") + 
+                    ggtitle("Sentiment of Donald Trump's Acceptance Speech"))
+
+dt.sentences[, readability := (automated_readability_index(dt.sentences$Speech, dt.sentences$sentence.num)$Readability[, 5])]
+
+dt.sentences[, readability := (flesch_kincaid(dt.sentences$Speech, dt.sentences$sentence.num)$Readability[, 5])]
+dt.sentences[, FK.grd.lvl := (flesch_kincaid(dt.sentences$Speech, dt.sentences$sentence.num)$Readability[, 5])]
+dt.sentences[, FK_read.ease := (flesch_kincaid(dt.sentences$Speech, dt.sentences$sentence.num)$Readability[, 6])]
+
+dt.avg.FK.grd.lvl <- mean(dt.sentences$FK.grd.lvl)
+dt.avg.FK.grd.lvl
+
+dt.avg.FK_read.ease <- mean(dt.sentences$FK_read.ease)
+dt.avg.FK_read.ease
+
+dt.avg.syllables <- mean(dt.sentences$syllables)
+dt.avg.syllables
+
+CustomScatterPlot(ggplot(dt.sentences, aes(dt.sentences$pct.complete, dt.sentences$FK.grd.lvl)) +
+                    ylab("Automated Readability Index") +
+                    ggtitle("Readability of Donald Trump's Speech"))
+
+# SPECIFICALLY FOR HILLARY
+hc.sentences <- as.data.table(dnc.split[dnc.split$Speaker=="Hillary Clinton", ])
+hc.sentences <- rbind(hc.sentences[1:218, ], hc.sentences[221:nrow(hc.sentences), ])
+hc.sentences[, sentence.num := seq(nrow(hc.sentences))]
+hc.sentences[, person := hc.sentences$Speaker]
+setcolorder(hc.sentences, c("sentence.num", "Speech", "Speaker", "person", "tot"))
+
+# Syllables per sentence
+hc.sentences[, syllables := syllable_sum(hc.sentences$Speech)]
+# Add cumulative syllable count and percent complete as proxy for progression
+hc.sentences[, syllables.cumsum := cumsum(hc.sentences$syllables)]
+hc.sentences[, pct.complete := hc.sentences$syllables.cumsum / sum(hc.sentences$syllables)]
+hc.sentences[, pct.complete.100 := hc.sentences$pct.complete * 100]
+
+# calculating polarity
+hc.pol.df <- polarity(hc.sentences$Speech)$all
+hc.sentences[, words := hc.pol.df$wc]
+hc.sentences[, pol := hc.pol.df$polarity]
+
+CustomScatterPlot(ggplot(hc.sentences, aes(pct.complete, pol)) +
+                    ylab("Sentiment (sentence-level polarity)") + 
+                    ggtitle("Sentiment of Hillary Clinton's Acceptance Speech"))
+
+hc.sentences[, readability := (automated_readability_index(hc.sentences$Speech, hc.sentences$sentence.num)$Readability[, 5])]
+
+hc.sentences[, readability := (flesch_kincaid(hc.sentences$Speech, hc.sentences$sentence.num)$Readability[, 5])]
+hc.sentences[, FK.grd.lvl := (flesch_kincaid(hc.sentences$Speech, hc.sentences$sentence.num)$Readability[, 5])]
+hc.sentences[, FK_read.ease := (flesch_kincaid(hc.sentences$Speech, hc.sentences$sentence.num)$Readability[, 6])]
+
+hc.avg.FK.grd.lvl <- mean(hc.sentences$FK.grd.lvl)
+hc.avg.FK.grd.lvl
+
+hc.avg.FK_read.ease <- mean(hc.sentences$FK_read.ease)
+hc.avg.FK_read.ease
+
+hc.avg.syllables <- mean(hc.sentences$syllables)
+hc.avg.syllables
+
+CustomScatterPlot(ggplot(hc.sentences, aes(hc.sentences$pct.complete, hc.sentences$FK.grd.lvl)) +
+                    ylab("Automated Readability Index") +
+                    ggtitle("Readability of Hillary Clinton's Speech"))
+
+
+# SPECIFICALLY FOR KHIZR
+khizr.sentences <- as.data.table(dnc.split[dnc.split$Speaker=="Khizr Khan", ])
+khizr.sentences[, sentence.num := seq(nrow(khizr.sentences))]
+khizr.sentences[, person := khizr.sentences$Speaker]
+setcolorder(khizr.sentences, c("sentence.num", "Speech", "Speaker", "person", "tot"))
+
+# Syllables per sentence
+khizr.sentences[, syllables := syllable_sum(khizr.sentences$Speech)]
+# Add cumulative syllable count and percent complete as proxy for progression
+khizr.sentences[, syllables.cumsum := cumsum(khizr.sentences$syllables)]
+khizr.sentences[, pct.complete := khizr.sentences$syllables.cumsum / sum(khizr.sentences$syllables)]
+khizr.sentences[, pct.complete.100 := khizr.sentences$pct.complete * 100]
+
+# calculating polarity
+khizr.pol.df <- polarity(khizr.sentences$Speech)$all
+khizr.sentences[, words := khizr.pol.df$wc]
+khizr.sentences[, pol := khizr.pol.df$polarity]
+
+CustomScatterPlot(ggplot(khizr.sentences, aes(pct.complete, pol)) +
+                    ylab("Sentiment (sentence-level polarity)") + 
+                    ggtitle("Sentiment of Khizr Khan's Speech"))
+
+khizr.sentences[, readability := (automated_readability_index(khizr.sentences$Speech, khizr.sentences$sentence.num)$Readability[, 5])]
+
+khizr.sentences[, readability := (flesch_kincaid(khizr.sentences$Speech, khizr.sentences$sentence.num)$Readability[, 5])]
+khizr.sentences[, FK.grd.lvl := (flesch_kincaid(khizr.sentences$Speech, khizr.sentences$sentence.num)$Readability[, 5])]
+khizr.sentences[, FK_read.ease := (flesch_kincaid(khizr.sentences$Speech, khizr.sentences$sentence.num)$Readability[, 6])]
+
+khizr.avg.FK.grd.lvl <- mean(khizr.sentences$FK.grd.lvl)
+khizr.avg.FK.grd.lvl
+
+khizr.avg.FK_read.ease <- mean(khizr.sentences$FK_read.ease)
+khizr.avg.FK_read.ease
+
+khizr.avg.syllables <- mean(khizr.sentences$syllables)
+khizr.avg.syllables
+
+CustomScatterPlot(ggplot(khizr.sentences, aes(khizr.sentences$pct.complete, khizr.sentences$FK.grd.lvl)) +
+                    ylab("Automated Readability Index") +
+                    ggtitle("Readability of Khizr Khan's Speech"))
+
+# SPECIFICALLY FOR KAINE
+kaine.sentences <- as.data.table(dnc.split[dnc.split$Speaker=="Tim Kaine", ])
+kaine.sentences <- rbind(kaine.sentences[1:42, ], kaine.sentences[44:nrow(kaine.sentences), ])
+kaine.sentences[, sentence.num := seq(nrow(kaine.sentences))]
+kaine.sentences[, person := kaine.sentences$Speaker]
+setcolorder(kaine.sentences, c("sentence.num", "Speech", "Speaker", "person", "tot"))
+
+# Syllables per sentence
+kaine.sentences[, syllables := syllable_sum(kaine.sentences$Speech)]
+# Add cumulative syllable count and percent complete as proxy for progression
+kaine.sentences[, syllables.cumsum := cumsum(kaine.sentences$syllables)]
+kaine.sentences[, pct.complete := kaine.sentences$syllables.cumsum / sum(kaine.sentences$syllables)]
+kaine.sentences[, pct.complete.100 := kaine.sentences$pct.complete * 100]
+
+# calculating polarity
+kaine.pol.df <- polarity(kaine.sentences$Speech)$all
+kaine.sentences[, words := kaine.pol.df$wc]
+kaine.sentences[, pol := kaine.pol.df$polarity]
+
+CustomScatterPlot(ggplot(kaine.sentences, aes(pct.complete, pol)) +
+                    ylab("Sentiment (sentence-level polarity)") + 
+                    ggtitle("Sentiment of Tim Khan's Speech"))
+
+kaine.sentences[, readability := (automated_readability_index(kaine.sentences$Speech, kaine.sentences$sentence.num)$Readability[, 5])]
+
+kaine.sentences[, readability := (flesch_kincaid(kaine.sentences$Speech, kaine.sentences$sentence.num)$Readability[, 5])]
+kaine.sentences[, FK.grd.lvl := (flesch_kincaid(kaine.sentences$Speech, kaine.sentences$sentence.num)$Readability[, 5])]
+kaine.sentences[, FK_read.ease := (flesch_kincaid(kaine.sentences$Speech, kaine.sentences$sentence.num)$Readability[, 6])]
+
+kaine.avg.FK.grd.lvl <- mean(kaine.sentences$FK.grd.lvl)
+kaine.avg.FK.grd.lvl
+
+kaine.avg.FK_read.ease <- mean(kaine.sentences$FK_read.ease)
+kaine.avg.FK_read.ease
+
+kaine.avg.syllables <- mean(kaine.sentences$syllables)
+kaine.avg.syllables
+
+CustomScatterPlot(ggplot(kaine.sentences, aes(kaine.sentences$pct.complete, kaine.sentences$FK.grd.lvl)) +
+                    ylab("Automated Readability Index") +
+                    ggtitle("Readability of Tim Kaine's Speech"))
+
+# SPECIFICALLY FOR OBAMA
+obama.sentences <- as.data.table(dnc.split[dnc.split$Speaker=="Barack Obama", ])
+obama.sentences <- rbind(obama.sentences[1:42, ], obama.sentences[44:nrow(obama.sentences), ])
+obama.sentences[, sentence.num := seq(nrow(obama.sentences))]
+obama.sentences[, person := obama.sentences$Speaker]
+setcolorder(obama.sentences, c("sentence.num", "Speech", "Speaker", "person", "tot"))
+
+# Syllables per sentence
+obama.sentences[, syllables := syllable_sum(obama.sentences$Speech)]
+# Add cumulative syllable count and percent complete as proxy for progression
+obama.sentences[, syllables.cumsum := cumsum(obama.sentences$syllables)]
+obama.sentences[, pct.complete := obama.sentences$syllables.cumsum / sum(obama.sentences$syllables)]
+obama.sentences[, pct.complete.100 := obama.sentences$pct.complete * 100]
+
+# calculating polarity
+obama.pol.df <- polarity(obama.sentences$Speech)$all
+obama.sentences[, words := obama.pol.df$wc]
+obama.sentences[, pol := obama.pol.df$polarity]
+
+CustomScatterPlot(ggplot(obama.sentences, aes(pct.complete, pol)) +
+                    ylab("Sentiment (sentence-level polarity)") + 
+                    ggtitle("Sentiment of President Barack Obama's Speech"))
+
+obama.sentences[, readability := (automated_readability_index(obama.sentences$Speech, obama.sentences$sentence.num)$Readability[, 5])]
+
+obama.sentences[, readability := (flesch_kincaid(obama.sentences$Speech, obama.sentences$sentence.num)$Readability[, 5])]
+obama.sentences[, FK.grd.lvl := (flesch_kincaid(obama.sentences$Speech, obama.sentences$sentence.num)$Readability[, 5])]
+obama.sentences[, FK_read.ease := (flesch_kincaid(obama.sentences$Speech, obama.sentences$sentence.num)$Readability[, 6])]
+
+obama.avg.FK.grd.lvl <- mean(obama.sentences$FK.grd.lvl)
+obama.avg.FK.grd.lvl
+
+obama.avg.FK_read.ease <- mean(obama.sentences$FK_read.ease)
+obama.avg.FK_read.ease
+
+obama.avg.syllables <- mean(obama.sentences$syllables)
+obama.avg.syllables
+
+CustomScatterPlot(ggplot(obama.sentences, aes(obama.sentences$pct.complete, obama.sentences$FK.grd.lvl)) +
+                    ylab("Automated Readability Index") +
+                    ggtitle("Readability of President Barack Obama's Speech"))
+
+
+# SPECIFICALLY FOR PENCE
+pence.sentences <- as.data.table(rnc.split[rnc.split$Speaker=="Mike Pence", ])
+pence.sentences <- rbind(pence.sentences[1:42, ], pence.sentences[44:nrow(pence.sentences), ])
+pence.sentences[, sentence.num := seq(nrow(pence.sentences))]
+pence.sentences[, person := pence.sentences$Speaker]
+setcolorder(pence.sentences, c("sentence.num", "Speech", "Speaker", "person", "tot"))
+
+# Syllables per sentence
+pence.sentences[, syllables := syllable_sum(pence.sentences$Speech)]
+# Add cumulative syllable count and percent complete as proxy for progression
+pence.sentences[, syllables.cumsum := cumsum(pence.sentences$syllables)]
+pence.sentences[, pct.complete := pence.sentences$syllables.cumsum / sum(pence.sentences$syllables)]
+pence.sentences[, pct.complete.100 := pence.sentences$pct.complete * 100]
+
+# calculating polarity
+pence.pol.df <- polarity(pence.sentences$Speech)$all
+pence.sentences[, words := pence.pol.df$wc]
+pence.sentences[, pol := pence.pol.df$polarity]
+
+CustomScatterPlot(ggplot(pence.sentences, aes(pct.complete, pol)) +
+                    ylab("Sentiment (sentence-level polarity)") + 
+                    ggtitle("Sentiment of pence Khan's Speech"))
+
+pence.sentences[, readability := (automated_readability_index(pence.sentences$Speech, pence.sentences$sentence.num)$Readability[, 5])]
+
+pence.sentences[, readability := (flesch_kincaid(pence.sentences$Speech, pence.sentences$sentence.num)$Readability[, 5])]
+pence.sentences[, FK.grd.lvl := (flesch_kincaid(pence.sentences$Speech, pence.sentences$sentence.num)$Readability[, 5])]
+pence.sentences[, FK_read.ease := (flesch_kincaid(pence.sentences$Speech, pence.sentences$sentence.num)$Readability[, 6])]
+
+pence.avg.FK.grd.lvl <- mean(pence.sentences$FK.grd.lvl)
+pence.avg.FK.grd.lvl
+
+pence.avg.FK_read.ease <- mean(pence.sentences$FK_read.ease)
+pence.avg.FK_read.ease
+
+pence.avg.syllables <- mean(pence.sentences$syllables)
+pence.avg.syllables
+
+CustomScatterPlot(ggplot(pence.sentences, aes(pence.sentences$pct.complete, pence.sentences$FK.grd.lvl)) +
+                    ylab("Automated Readability Index") +
+                    ggtitle("Readability of Mike Pence's Speech"))
+
+
+# SPECIFICALLY FOR CHRISTIE
+christie.sentences <- as.data.table(rnc.split[rnc.split$Speaker=="Chris Christie", ])
+christie.sentences[, sentence.num := seq(nrow(christie.sentences))]
+christie.sentences[, person := christie.sentences$Speaker]
+setcolorder(christie.sentences, c("sentence.num", "Speech", "Speaker", "person", "tot"))
+
+# Syllables per sentence
+christie.sentences[, syllables := syllable_sum(christie.sentences$Speech)]
+# Add cumulative syllable count and percent complete as proxy for progression
+christie.sentences[, syllables.cumsum := cumsum(christie.sentences$syllables)]
+christie.sentences[, pct.complete := christie.sentences$syllables.cumsum / sum(christie.sentences$syllables)]
+christie.sentences[, pct.complete.100 := christie.sentences$pct.complete * 100]
+
+# calculating polarity
+christie.pol.df <- polarity(christie.sentences$Speech)$all
+christie.sentences[, words := christie.pol.df$wc]
+christie.sentences[, pol := christie.pol.df$polarity]
+
+CustomScatterPlot(ggplot(christie.sentences, aes(pct.complete, pol)) +
+                    ylab("Sentiment (sentence-level polarity)") + 
+                    ggtitle("Sentiment of Chris Christie's Speech"))
+
+christie.sentences[, readability := (automated_readability_index(christie.sentences$Speech, christie.sentences$sentence.num)$Readability[, 5])]
+
+christie.sentences[, readability := (flesch_kincaid(christie.sentences$Speech, christie.sentences$sentence.num)$Readability[, 5])]
+christie.sentences[, FK.grd.lvl := (flesch_kincaid(christie.sentences$Speech, christie.sentences$sentence.num)$Readability[, 5])]
+christie.sentences[, FK_read.ease := (flesch_kincaid(christie.sentences$Speech, christie.sentences$sentence.num)$Readability[, 6])]
+
+christie.avg.FK.grd.lvl <- mean(christie.sentences$FK.grd.lvl)
+christie.avg.FK.grd.lvl
+
+christie.avg.FK_read.ease <- mean(christie.sentences$FK_read.ease)
+christie.avg.FK_read.ease
+
+christie.avg.syllables <- mean(christie.sentences$syllables)
+christie.avg.syllables
+
+CustomScatterPlot(ggplot(christie.sentences, aes(christie.sentences$pct.complete, christie.sentences$FK.grd.lvl)) +
+                    ylab("Automated Readability Index") +
+                    ggtitle("Readability of Chris Christie's Speech"))
+
+```
